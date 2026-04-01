@@ -34,10 +34,16 @@ async function searchFriends(req, res) {
 
     console.log('searchFriends - found workers:', workers.length)
 
+    // 转换photo字段为URL
+    const formattedWorkers = workers.map(worker => ({
+      ...worker.toObject(),
+      photo: worker.photo ? `/api/upload/avatar/${worker._id}?t=${Date.now()}` : ''
+    }))
+
     res.json({
       code: 200,
       msg: '获取成功',
-      data: workers
+      data: formattedWorkers
     })
   } catch (error) {
     console.error('Search friends error:', error)
@@ -73,7 +79,7 @@ async function getFriends(req, res) {
           friendId: friend._id,
           name: friend.name,
           username: friend.username,
-          photo: friend.photo,
+          photo: friend.photo ? `/api/upload/avatar/${friend._id}?t=${Date.now()}` : '',
           position: friend.position,
           department: friend.department,
           onlineStatus: friend.onlineStatus
@@ -113,7 +119,7 @@ async function getPendingRequests(req, res) {
       userId: rel.userId._id,
       name: rel.userId.name,
       username: rel.userId.username,
-      photo: rel.userId.photo,
+      photo: rel.userId.photo ? `/api/upload/avatar/${rel.userId._id}?t=${Date.now()}` : '',
       position: rel.userId.position,
       department: rel.userId.department,
       createdAt: rel.createdAt
@@ -238,7 +244,7 @@ async function sendFriendRequest(req, res) {
           io.to(targetStr).emit('friend_request', {
             userId: userId,
             name: user.name,
-            photo: user.photo
+            photo: user.photo ? `/api/upload/avatar/${user._id}?t=${Date.now()}` : ''
           })
         }
         
@@ -269,7 +275,7 @@ async function sendFriendRequest(req, res) {
       io.to(targetStr).emit('friend_request', {
         userId: userId,
         name: user.name,
-        photo: user.photo
+        photo: user.photo ? `/api/upload/avatar/${user._id}?t=${Date.now()}` : ''
       })
     }
 
@@ -320,14 +326,14 @@ async function handleFriendRequest(req, res) {
       const user = await User.findById(userId).select('name photo')
       
       // 推送同意消息
-      const io = req.app.get('io')
-      if (io) {
-        io.to(requesterId.toString()).emit('friend_agreed', {
-          friendId: userId,
-          name: user.name,
-          photo: user.photo
-        })
-      }
+        const io = req.app.get('io')
+        if (io) {
+          io.to(requesterId.toString()).emit('friend_agreed', {
+            friendId: userId,
+            name: user.name,
+            photo: user.photo ? `/api/upload/avatar/${user._id}?t=${Date.now()}` : ''
+          })
+        }
       
       res.json({
         code: 200,
@@ -465,7 +471,7 @@ async function sendMessage(req, res) {
         chatId,
         senderId,
         senderName: sender.name,
-        senderPhoto: sender.photo,
+        senderPhoto: sender.photo ? `/api/upload/avatar/${sender._id}?t=${Date.now()}` : '',
         receiverId,
         content: content.trim(),
         sendTime

@@ -18,7 +18,6 @@ class SocketService {
 
     // token 变了或未连接，先断开旧的
     if (this.socket) {
-      this.socket.removeAllListeners()
       this.socket.disconnect()
       this.socket = null
       this.callbacks = {}
@@ -150,6 +149,12 @@ class SocketService {
     this.socket.on('online_status', (data) => {
       console.log('在线状态更新:', data)
       this.emit('online_status', data)
+    })
+
+    // 监听头像更新
+    this.socket.on('avatar_updated', (data) => {
+      console.log('头像更新:', data)
+      this.emit('avatar_updated', data)
     })
   }
 

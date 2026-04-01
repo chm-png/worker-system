@@ -102,7 +102,7 @@ async function getAttendanceList(req, res) {
         workerId: worker._id,
         name: worker.name,
         username: worker.username,
-        photo: worker.photo,
+        photo: worker.photo ? `/api/upload/avatar/${worker._id}?t=${Date.now()}` : '',
         position: worker.position,
         department: worker.department,
         todayStatus: record ? (record.todayStatus || 'none') : 'none',

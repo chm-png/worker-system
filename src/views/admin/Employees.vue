@@ -92,6 +92,8 @@
 
 <script>
 import { getWorkers, addWorker } from '@/api/user'
+import socketService from '@/utils/socket'
+import { getAvatarUrl } from '@/utils/avatar'
 
 export default {
   name: 'AdminEmployees',
@@ -128,8 +130,31 @@ export default {
   },
   created() {
     this.fetchData()
+    this.initSocket()
+  },
+  beforeDestroy() {
+    this.removeSocketListeners()
   },
   methods: {
+    getAvatarUrl,
+
+    initSocket() {
+      // 连接Socket
+      socketService.connect(this.$store.state.user.token)
+      // 添加头像更新监听
+      this.addSocketListeners()
+    },
+    addSocketListeners() {
+      // 监听头像更新事件
+      socketService.on('avatar_updated', () => {
+        // 重新获取员工列表，更新头像显示
+        this.fetchData()
+      })
+    },
+    removeSocketListeners() {
+      // 移除监听
+      socketService.off('avatar_updated')
+    },
     async fetchData() {
       try {
         const res = await getWorkers()

@@ -285,6 +285,11 @@ export default {
       }
     },
 
+    getAvatarUrl(userId) {
+      if (!userId) return ''
+      return `/api/upload/avatar/${userId}?t=${new Date().getTime()}`
+    },
+
     handleCommand(command) {
       if (command === 'logout') {
         this.handleLogout()
@@ -322,7 +327,8 @@ export default {
       this.avatarUploading = true
       try {
         const res = await uploadAvatar(raw)
-        this.$store.commit('user/SET_PHOTO', res.data.photo)
+        // 头像已存储到数据库，刷新用户信息
+        await this.$store.dispatch('user/getUserInfo')
         this.$message.success('头像更新成功')
         this.avatarDialogVisible = false
       } catch (e) {

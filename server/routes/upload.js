@@ -88,21 +88,47 @@ router.post('/avatar', authMiddleware, workerMiddleware, upload.single('avatar')
     }
 
     const User = require('../models/User')
-    const newUrl = filePathToPublicUrl(req.file.path)
+    const photoBuffer = fs.readFileSync(req.file.path)
+    const mimeType = req.file.mimetype
 
-    // 删除旧头像文件（仅本地文件才删，外链默认头像跳过）
-    const user = await User.findById(req.userId)
-    if (user?.photo && user.photo.startsWith('/uploads')) {
-      const oldPath = path.join(__dirname, '..', '..', user.photo.replace(/^\//, ''))
-      try { fs.unlinkSync(oldPath) } catch {}
+    // 删除临时文件
+    try { fs.unlinkSync(req.file.path) } catch {}
+
+    await User.findByIdAndUpdate(req.userId, { 
+      photo: photoBuffer,
+      photoMimeType: mimeType
+    })
+
+    // 通知管理端有员工更新了头像
+    const io = req.app.get('io')
+    if (io) {
+      io.emit('avatar_updated', { 
+        workerId: req.userId 
+      })
     }
 
-    await User.findByIdAndUpdate(req.userId, { photo: newUrl })
-
-    res.json({ code: 200, msg: '头像更新成功', data: { photo: newUrl } })
+    res.json({ code: 200, msg: '头像更新成功', data: { success: true } })
   } catch (error) {
     console.error('头像上传错误:', error)
     res.status(500).json({ code: 500, msg: '头像更新失败', data: null })
+  }
+})
+
+// 获取用户头像
+router.get('/avatar/:userId', async (req, res) => {
+  try {
+    const User = require('../models/User')
+    const user = await User.findById(req.params.userId)
+    
+    if (!user || !user.photo) {
+      return res.status(404).json({ code: 404, msg: '头像不存在', data: null })
+    }
+    
+    res.set('Content-Type', user.photoMimeType)
+    res.send(user.photo)
+  } catch (error) {
+    console.error('获取头像错误:', error)
+    res.status(500).json({ code: 500, msg: '获取头像失败', data: null })
   }
 })
 

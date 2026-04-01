@@ -157,6 +157,8 @@
 
 <script>
 import { getAttendanceStats, getAttendanceList, updateAttendance, exportAttendance } from '@/api/attendance'
+import socketService from '@/utils/socket'
+import { getAvatarUrl } from '@/utils/avatar'
 
 export default {
   name: 'AdminAttendance',
@@ -190,8 +192,31 @@ export default {
   created() {
     this.fetchStats()
     this.fetchData()
+    this.initSocket()
+  },
+  beforeDestroy() {
+    this.removeSocketListeners()
   },
   methods: {
+    getAvatarUrl,
+
+    initSocket() {
+      // 连接Socket
+      socketService.connect(this.$store.state.user.token)
+      // 添加头像更新监听
+      this.addSocketListeners()
+    },
+    addSocketListeners() {
+      // 监听头像更新事件
+      socketService.on('avatar_updated', () => {
+        // 重新获取考勤列表，更新头像显示
+        this.fetchData()
+      })
+    },
+    removeSocketListeners() {
+      // 移除监听
+      socketService.off('avatar_updated')
+    },
     async fetchStats() {
       try {
         const res = await getAttendanceStats()

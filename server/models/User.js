@@ -23,6 +23,10 @@ const userSchema = new mongoose.Schema({
     trim: true
   },
   photo: {
+    type: Buffer,
+    default: null
+  },
+  photoMimeType: {
     type: String,
     default: ''
   },

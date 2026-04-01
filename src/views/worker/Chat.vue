@@ -17,7 +17,7 @@
         </div>
         <div class="pending-list" v-show="showPendingRequests">
           <div v-for="request in pendingRequests" :key="request.requestId" class="pending-item">
-            <img :src="request.photo || defaultAvatar" class="avatar" />
+            <img :src="getAvatarUrl(request.userId, request.photo)" class="avatar" />
             <div class="request-info">
               <span class="name">{{ request.name }}</span>
               <span class="position">{{ request.position }} / {{ request.department }}</span>
@@ -44,7 +44,7 @@
           @click="selectFriend(friend)"
         >
           <div class="avatar-wrapper">
-            <img :src="friend.photo || defaultAvatar" class="avatar" />
+            <img :src="getAvatarUrl(friend.friendId, friend.photo)" class="avatar" />
             <span class="online-dot" :class="{ online: friend.onlineStatus }"></span>
             <span class="unread-badge" v-if="getUnreadCount(friend.friendId) > 0">
               {{ getUnreadCount(friend.friendId) > 99 ? '99+' : getUnreadCount(friend.friendId) }}
@@ -68,7 +68,7 @@
       <template v-if="currentChat">
         <div class="chat-header">
           <div class="chat-user">
-            <img :src="currentChat.photo || defaultAvatar" class="avatar" />
+            <img :src="getAvatarUrl(currentChat.friendId, currentChat.photo)" class="avatar" />
             <span class="name">{{ currentChat.name }}</span>
             <span class="status" :class="{ online: currentChat.onlineStatus }">
               {{ currentChat.onlineStatus ? '在线' : '离线' }}
@@ -77,13 +77,19 @@
         </div>
 
         <div class="messages-area" ref="messagesArea">
+          <!-- 加载状态 -->
+          <div v-if="loading" class="loading-container">
+            <el-icon class="loading-icon"><i class="el-icon-loading"></i></el-icon>
+            <span>加载中...</span>
+          </div>
+          
           <div
             v-for="msg in currentMessages"
             :key="msg._id || msg.tempId"
             class="message"
             :class="{ self: isSelfMessage(msg) }"
           >
-            <img :src="msg.senderPhoto || defaultAvatar" class="avatar" v-if="!isSelfMessage(msg)" />
+            <img :src="getAvatarUrl(msg.senderId, msg.senderPhoto)" class="avatar" v-if="!isSelfMessage(msg)" />
             <div class="message-bubble">
               <p>{{ msg.content }}</p>
               <span class="time">{{ formatTime(msg.sendTime) }}</span>
@@ -134,7 +140,7 @@
           :key="user._id"
           class="result-item"
         >
-          <img :src="user.photo || defaultAvatar" class="avatar" />
+          <img :src="getAvatarUrl(user._id, user.photo)" class="avatar" />
           <div class="user-info">
             <span class="name">{{ user.name }}</span>
             <span class="position">{{ user.position }} / {{ user.department }}</span>
@@ -155,6 +161,7 @@
 <script>
 import { mapState, mapActions, mapGetters } from 'vuex'
 import socketService from '@/utils/socket'
+import { getAvatarUrl } from '@/utils/avatar'
 
 export default {
   name: 'WorkerChat',
@@ -171,7 +178,8 @@ export default {
       showPendingRequests: true,
       localMessages: [],
       lastProcessedMsgId: null, // 记录上一次处理的消息ID
-      processedMsgIds: new Set() // 用于追踪已处理的消息ID
+      processedMsgIds: new Set(), // 用于追踪已处理的消息ID
+      loading: false // 加载状态
     }
   },
   computed: {
@@ -232,11 +240,19 @@ export default {
     this.loadLocalMessages()
     // 初始化 Socket 监听
     this.$store.dispatch('chat/initSocket')
+    // 监听头像更新
+    socketService.on('avatar_updated', () => {
+      this.fetchFriends()
+    })
   },
   beforeDestroy() {
     this.saveLocalMessages()
+    // 移除头像更新监听
+    socketService.off('avatar_updated')
   },
   methods: {
+    getAvatarUrl,
+
     ...mapActions('chat', ['getFriends', 'searchFriends', 'sendFriendRequest', 'getChatHistory', 'sendMessage', 'getPendingRequests', 'handleFriendRequest', 'clearUnread']),
 
     async fetchFriends() {
@@ -288,6 +304,9 @@ export default {
     },
 
     async selectFriend(friend) {
+      // 防止重复点击
+      if (this.loading) return
+      
       // 保存当前聊天记录
       this.saveLocalMessages()
 
@@ -300,38 +319,48 @@ export default {
 
       this.currentChatId = friend.friendId
       this.currentChat = friend
+      this.loading = true
 
-      // 生成 chatId
-      const chatId = this.getChatId(this.userId, friend.friendId)
+      try {
+        // 生成 chatId
+        const chatId = this.getChatId(this.userId, friend.friendId)
 
-      // 加载聊天记录
-      await this.getChatHistory(chatId)
+        // 先显示本地存储的消息，提升用户体验
+        this.loadLocalMessages()
 
-      // 从 Vuex 获取消息并保存到本地
-      const storedMessages = this.$store.state.chat.currentMessages || []
-      this.localMessages = [...storedMessages]
+        // 加载聊天记录
+        await this.getChatHistory(chatId)
 
-      // 将历史消息ID加入已处理集合，防止重复
-      storedMessages.forEach(msg => {
-        if (msg._id) {
-          this.processedMsgIds.add(String(msg._id))
+        // 从 Vuex 获取消息并保存到本地
+        const storedMessages = this.$store.state.chat.currentMessages || []
+        this.localMessages = [...storedMessages]
+
+        // 将历史消息ID加入已处理集合，防止重复
+        storedMessages.forEach(msg => {
+          if (msg._id) {
+            this.processedMsgIds.add(String(msg._id))
+          }
+          if (msg.tempId) {
+            this.processedMsgIds.add(String(msg.tempId))
+          }
+        })
+
+        // 标记消息已读
+        if (this.localMessages.length > 0) {
+          const lastMsg = this.localMessages[this.localMessages.length - 1]
+          if (String(lastMsg.senderId) !== String(this.userId) && !lastMsg.isRead) {
+            socketService.markMessageRead(chatId, lastMsg.senderId)
+          }
         }
-        if (msg.tempId) {
-          this.processedMsgIds.add(String(msg.tempId))
-        }
-      })
 
-      // 标记消息已读
-      if (this.localMessages.length > 0) {
-        const lastMsg = this.localMessages[this.localMessages.length - 1]
-        if (String(lastMsg.senderId) !== String(this.userId) && !lastMsg.isRead) {
-          socketService.markMessageRead(chatId, lastMsg.senderId)
-        }
+        this.$nextTick(() => {
+          this.scrollToBottom()
+        })
+      } catch (error) {
+        console.error('加载聊天记录失败:', error)
+      } finally {
+        this.loading = false
       }
-
-      this.$nextTick(() => {
-        this.scrollToBottom()
-      })
     },
 
     isSelfMessage(msg) {
@@ -463,7 +492,43 @@ export default {
     saveLocalMessages() {
       if (this.currentChatId && this.localMessages.length > 0) {
         const key = `chat_${this.getChatId(this.userId, this.currentChatId)}`
-        localStorage.setItem(key, JSON.stringify(this.localMessages))
+        // 限制存储的消息数量，只保存最近的50条
+        const messagesToSave = this.localMessages.slice(-50)
+        // 简化消息结构，只保存必要字段
+        const simplifiedMessages = messagesToSave.map(msg => ({
+          _id: msg._id,
+          tempId: msg.tempId,
+          senderId: msg.senderId,
+          content: msg.content,
+          sendTime: msg.sendTime,
+          isRead: msg.isRead
+        }))
+        try {
+          localStorage.setItem(key, JSON.stringify(simplifiedMessages))
+        } catch (e) {
+          console.error('存储聊天记录失败:', e)
+          // 如果存储失败，尝试清除所有旧的聊天记录
+          this.clearAllChatData()
+          try {
+            localStorage.setItem(key, JSON.stringify(simplifiedMessages))
+          } catch (e) {
+            console.error('再次存储聊天记录失败:', e)
+          }
+        }
+      }
+    },
+    // 清除所有聊天数据
+    clearAllChatData() {
+      try {
+        // 获取所有聊天记录的键
+        const keys = Object.keys(localStorage).filter(key => key.startsWith('chat_'))
+        // 删除所有聊天记录
+        keys.forEach(key => {
+          localStorage.removeItem(key)
+        })
+        console.log('已清除所有聊天记录数据')
+      } catch (e) {
+        console.error('清除聊天数据失败:', e)
       }
     },
 
@@ -896,6 +961,30 @@ export default {
     font-size: 64px;
     margin-bottom: 16px;
   }
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  color: #6b7280;
+  
+  .loading-icon {
+    font-size: 32px;
+    margin-bottom: 12px;
+    animation: spin 1s linear infinite;
+  }
+  
+  span {
+    font-size: 14px;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .search-friend {

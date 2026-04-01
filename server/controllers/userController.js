@@ -58,7 +58,7 @@ async function login(req, res) {
       username: user.username,
       name: user.name,
       role: user.role,
-      photo: user.photo,
+      photo: user.photo ? `/api/upload/avatar/${user._id}?t=${Date.now()}` : '',
       position: user.position,
       department: user.department,
       createdAt: user.createdAt
@@ -92,7 +92,7 @@ async function getUserInfo(req, res) {
         username: req.user.username,
         name: req.user.name,
         role: req.user.role,
-        photo: req.user.photo,
+        photo: req.user.photo ? `/api/upload/avatar/${req.user._id}?t=${Date.now()}` : '',
         phone: req.user.phone,
         position: req.user.position,
         department: req.user.department,
@@ -166,10 +166,16 @@ async function getWorkers(req, res) {
       .select('_id name username photo phone position department onlineStatus status createdAt')
       .sort({ createdAt: -1 })
 
+    // 转换头像为URL
+    const workersWithAvatarUrl = workers.map(worker => ({
+      ...worker.toObject(),
+      photo: worker.photo ? `/api/upload/avatar/${worker._id}?t=${Date.now()}` : ''
+    }))
+
     res.json({
       code: 200,
       msg: '获取成功',
-      data: workers
+      data: workersWithAvatarUrl
     })
   } catch (error) {
     console.error('Get workers error:', error)
@@ -310,10 +316,16 @@ async function searchWorkers(req, res) {
       username: { $regex: keyword || '', $options: 'i' }
     }).select('_id name username photo position department')
     
+    // 转换头像为URL
+    const workersWithAvatarUrl = workers.map(worker => ({
+      ...worker.toObject(),
+      photo: worker.photo ? `/api/upload/avatar/${worker._id}?t=${Date.now()}` : ''
+    }))
+    
     res.json({
       code: 200,
       msg: '获取成功',
-      data: workers
+      data: workersWithAvatarUrl
     })
   } catch (error) {
     console.error('Search workers error:', error)
