@@ -246,9 +246,17 @@ export default {
     })
   },
   beforeDestroy() {
+    this.syncLocalMessagesToServer()
     this.saveLocalMessages()
     // 移除头像更新监听
     socketService.off('avatar_updated')
+  },
+  mounted() {
+    // 监听页面关闭事件，确保在关闭浏览器时同步聊天记录
+    window.addEventListener('beforeunload', this.syncLocalMessagesToServer)
+  },
+  beforeUnmount() {
+    window.removeEventListener('beforeunload', this.syncLocalMessagesToServer)
   },
   methods: {
     getAvatarUrl,
@@ -331,12 +339,33 @@ export default {
         // 加载聊天记录
         await this.getChatHistory(chatId)
 
-        // 从 Vuex 获取消息并保存到本地
+        // 从 Vuex 获取消息并与本地消息合并
         const storedMessages = this.$store.state.chat.currentMessages || []
-        this.localMessages = [...storedMessages]
+        
+        // 合并消息，去重，按时间排序
+        const allMessages = [...this.localMessages, ...storedMessages]
+        const uniqueMessages = []
+        const messageIds = new Set()
+        
+        allMessages.forEach(msg => {
+          const msgId = msg._id || msg.tempId
+          if (msgId && !messageIds.has(msgId)) {
+            messageIds.add(msgId)
+            uniqueMessages.push(msg)
+          }
+        })
+        
+        // 按时间排序
+        uniqueMessages.sort((a, b) => {
+          const timeA = new Date(a.sendTime).getTime()
+          const timeB = new Date(b.sendTime).getTime()
+          return timeA - timeB
+        })
+        
+        this.localMessages = uniqueMessages
 
-        // 将历史消息ID加入已处理集合，防止重复
-        storedMessages.forEach(msg => {
+        // 将消息ID加入已处理集合，防止重复
+        uniqueMessages.forEach(msg => {
           if (msg._id) {
             this.processedMsgIds.add(String(msg._id))
           }
@@ -544,6 +573,55 @@ export default {
             console.error('加载聊天记录失败:', e)
           }
         }
+      }
+    },
+
+    // 将本地存储的聊天记录同步到服务器
+    async syncLocalMessagesToServer() {
+      try {
+        // 获取所有聊天记录的键
+        const keys = Object.keys(localStorage).filter(key => key.startsWith('chat_'))
+        
+        for (const key of keys) {
+          const saved = localStorage.getItem(key)
+          if (saved) {
+            try {
+              const messages = JSON.parse(saved)
+              
+              // 过滤出需要同步的消息（没有真实的_id或包含tempId）
+              const messagesToSync = messages.filter(msg => 
+                !msg._id || msg._id.startsWith('temp_') || msg.tempId
+              )
+              
+              if (messagesToSync.length > 0) {
+                // 从键中提取聊天对象ID
+                const chatId = key.replace('chat_', '')
+                const [userId1, userId2] = chatId.split('_')
+                const friendId = String(userId1) === String(this.userId) ? userId2 : userId1
+                
+                // 逐个发送消息到服务器
+                for (const msg of messagesToSync) {
+                  if (String(msg.senderId) === String(this.userId)) {
+                    try {
+                      await this.sendMessage({
+                        receiverId: friendId,
+                        content: msg.content
+                      })
+                    } catch (error) {
+                      console.error('同步消息失败:', error)
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('解析聊天记录失败:', e)
+            }
+          }
+        }
+        
+        console.log('本地聊天记录已同步到服务器')
+      } catch (e) {
+        console.error('同步聊天记录失败:', e)
       }
     }
   }
