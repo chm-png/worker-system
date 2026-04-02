@@ -237,7 +237,6 @@ export default {
   created() {
     this.fetchFriends()
     this.fetchPendingRequests()
-    this.loadLocalMessages()
     // 初始化 Socket 监听
     this.$store.dispatch('chat/initSocket')
     // 监听头像更新
@@ -245,7 +244,7 @@ export default {
       this.fetchFriends()
     })
   },
-  beforeDestroy() {
+  beforeUnmount() {
     this.syncLocalMessagesToServer()
     this.saveLocalMessages()
     // 移除头像更新监听
@@ -255,28 +254,13 @@ export default {
     // 监听页面关闭事件，确保在关闭浏览器时同步聊天记录
     window.addEventListener('beforeunload', this.syncLocalMessagesToServer)
   },
-  beforeUnmount() {
+  unmounted() {
     window.removeEventListener('beforeunload', this.syncLocalMessagesToServer)
   },
   methods: {
     getAvatarUrl,
 
     ...mapActions('chat', ['getFriends', 'searchFriends', 'sendFriendRequest', 'getChatHistory', 'sendMessage', 'getPendingRequests', 'handleFriendRequest', 'clearUnread']),
-
-    async fetchFriends() {
-      await this.getFriends()
-    },
-
-    async fetchPendingRequests() {
-      await this.getPendingRequests()
-    },
-
-    messageDedupeKey(msg) {
-      if (msg._id != null && msg._id !== '') return String(msg._id)
-      if (msg.tempId) return String(msg.tempId)
-      const t = msg.sendTime ? new Date(msg.sendTime).getTime() : ''
-      return `${msg.senderId}_${t}_${msg.content}`
-    },
 
     // 处理当前聊天的消息（Socket → ADD_UNREAD_MESSAGE → 此处并入展示列表）
     handleCurrentChatMessages(newUnread) {
@@ -287,14 +271,16 @@ export default {
 
       let appended = false
       messages.forEach((msg) => {
-        const msgId = this.messageDedupeKey(msg)
-        if (this.processedMsgIds.has(msgId)) return
+        const msgId = msg._id || msg.tempId
+        if (msgId && this.processedMsgIds.has(msgId)) return
         const exists = this.localMessages.some(
-          (m) => this.messageDedupeKey(m) === msgId
+          (m) => (m._id === msgId || m.tempId === msgId)
         )
         if (!exists) {
           this.localMessages.push(msg)
-          this.processedMsgIds.add(msgId)
+          if (msgId) {
+            this.processedMsgIds.add(msgId)
+          }
           appended = true
         }
       })
@@ -303,8 +289,6 @@ export default {
         this.$nextTick(() => this.scrollToBottom())
       }
     },
-
-    // 注意：Socket 监听器已在 store 中统一管理
 
     getChatId(userId, friendId) {
       const sorted = [String(userId), String(friendId)].sort()
@@ -506,10 +490,6 @@ export default {
           this.$message.error(error.response.data.msg)
         }
       }
-    },
-
-    handleSearch() {
-      // 搜索过滤在计算属性中处理
     },
 
     // 获取某个好友的未读消息数
