@@ -1,6 +1,6 @@
 const User = require('../models/User')
 const { encryptPwd, comparePwd } = require('../utils/password')
-const { generateToken } = require('../utils/jwt')
+const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/jwt')
 
 /**
  * 用户登录
@@ -46,10 +46,26 @@ async function login(req, res) {
       })
     }
     
-    // 生成 token
-    const token = generateToken({
+    // 生成双token
+    const accessToken = generateAccessToken({
       userId: user._id,
       role: user.role
+    })
+    
+    const refreshToken = generateRefreshToken({
+      userId: user._id
+    })
+    
+    // 保存refreshToken到数据库
+    user.refreshToken = refreshToken
+    await user.save()
+    
+    // 设置refreshToken到cookie
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7天
     })
     
     // 返回用户信息（不含密码）
@@ -67,10 +83,65 @@ async function login(req, res) {
     res.json({
       code: 200,
       msg: '登录成功',
-      data: { token, userInfo }
+      data: { token: accessToken, userInfo }
     })
   } catch (error) {
-    console.error('Login error:', error)
+    res.status(500).json({
+      code: 500,
+      msg: '服务器内部错误',
+      data: null
+    })
+  }
+}
+
+/**
+ * 刷新token
+ */
+async function refreshToken(req, res) {
+  try {
+    // 从cookie或body中获取refreshToken
+    const refreshToken = req.cookies.refreshToken || req.body.refreshToken
+    
+    if (!refreshToken) {
+      return res.status(401).json({
+        code: 401,
+        msg: '缺少refreshToken',
+        data: null
+      })
+    }
+    
+    // 验证refreshToken
+    const decoded = verifyRefreshToken(refreshToken)
+    if (!decoded) {
+      return res.status(401).json({
+        code: 401,
+        msg: 'refreshToken无效或已过期',
+        data: null
+      })
+    }
+    
+    // 查找用户
+    const user = await User.findById(decoded.userId)
+    if (!user || user.refreshToken !== refreshToken) {
+      return res.status(401).json({
+        code: 401,
+        msg: '用户不存在或refreshToken已失效',
+        data: null
+      })
+    }
+    
+    // 生成新的accessToken
+    const accessToken = generateAccessToken({
+      userId: user._id,
+      role: user.role
+    })
+    
+    res.json({
+      code: 200,
+      msg: 'token刷新成功',
+      data: { token: accessToken }
+    })
+  } catch (error) {
     res.status(500).json({
       code: 500,
       msg: '服务器内部错误',
@@ -100,7 +171,6 @@ async function getUserInfo(req, res) {
       }
     })
   } catch (error) {
-    console.error('Get user info error:', error)
     res.status(500).json({
       code: 500,
       msg: '服务器内部错误',
@@ -148,7 +218,6 @@ async function register(req, res) {
       data: { userId: user._id }
     })
   } catch (error) {
-    console.error('Register error:', error)
     res.status(500).json({
       code: 500,
       msg: '服务器内部错误',
@@ -178,7 +247,6 @@ async function getWorkers(req, res) {
       data: workersWithAvatarUrl
     })
   } catch (error) {
-    console.error('Get workers error:', error)
     res.status(500).json({
       code: 500,
       msg: '服务器内部错误',
@@ -240,7 +308,6 @@ async function addWorker(req, res) {
       }
     })
   } catch (error) {
-    console.error('Add worker error:', error)
     res.status(500).json({
       code: 500,
       msg: '服务器内部错误',
@@ -294,7 +361,6 @@ async function changePassword(req, res) {
       data: null
     })
   } catch (error) {
-    console.error('Change password error:', error)
     res.status(500).json({
       code: 500,
       msg: '服务器内部错误',
@@ -328,7 +394,6 @@ async function searchWorkers(req, res) {
       data: workersWithAvatarUrl
     })
   } catch (error) {
-    console.error('Search workers error:', error)
     res.status(500).json({
       code: 500,
       msg: '服务器内部错误',
@@ -344,5 +409,6 @@ module.exports = {
   getWorkers,
   searchWorkers,
   addWorker,
-  changePassword
+  changePassword,
+  refreshToken
 }

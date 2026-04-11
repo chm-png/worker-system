@@ -177,7 +177,6 @@ export default {
       currentChat: null,
       showPendingRequests: true,
       localMessages: [],
-      lastProcessedMsgId: null, // 记录上一次处理的消息ID
       processedMsgIds: new Set(), // 用于追踪已处理的消息ID
       loading: false // 加载状态
     }
@@ -235,13 +234,13 @@ export default {
     }
   },
   created() {
-    this.fetchFriends()
-    this.fetchPendingRequests()
+    this.getFriends()
+    this.getPendingRequests()
     // 初始化 Socket 监听
     this.$store.dispatch('chat/initSocket')
     // 监听头像更新
     socketService.on('avatar_updated', () => {
-      this.fetchFriends()
+      this.getFriends()
     })
   },
   beforeUnmount() {
@@ -302,11 +301,10 @@ export default {
       // 保存当前聊天记录
       this.saveLocalMessages()
 
-      // 清除未读消息（Vue.delete 确保响应式）
+      // 清除未读消息
       this.clearUnread(friend.friendId)
 
       // 重置消息处理状态
-      this.lastProcessedMsgId = null
       this.processedMsgIds = new Set()
 
       this.currentChatId = friend.friendId
@@ -327,44 +325,12 @@ export default {
         const storedMessages = this.$store.state.chat.currentMessages || []
         
         // 合并消息，去重，按时间排序
-        const allMessages = [...this.localMessages, ...storedMessages]
-        const uniqueMessages = []
-        const messageIds = new Set()
-        
-        allMessages.forEach(msg => {
-          const msgId = msg._id || msg.tempId
-          if (msgId && !messageIds.has(msgId)) {
-            messageIds.add(msgId)
-            uniqueMessages.push(msg)
-          }
-        })
-        
-        // 按时间排序
-        uniqueMessages.sort((a, b) => {
-          const timeA = new Date(a.sendTime).getTime()
-          const timeB = new Date(b.sendTime).getTime()
-          return timeA - timeB
-        })
+        const uniqueMessages = this.mergeAndSortMessages([...this.localMessages, ...storedMessages])
         
         this.localMessages = uniqueMessages
 
-        // 将消息ID加入已处理集合，防止重复
-        uniqueMessages.forEach(msg => {
-          if (msg._id) {
-            this.processedMsgIds.add(String(msg._id))
-          }
-          if (msg.tempId) {
-            this.processedMsgIds.add(String(msg.tempId))
-          }
-        })
-
         // 标记消息已读
-        if (this.localMessages.length > 0) {
-          const lastMsg = this.localMessages[this.localMessages.length - 1]
-          if (String(lastMsg.senderId) !== String(this.userId) && !lastMsg.isRead) {
-            socketService.markMessageRead(chatId, lastMsg.senderId)
-          }
-        }
+        this.markMessagesAsRead(chatId)
 
         this.$nextTick(() => {
           this.scrollToBottom()
@@ -373,6 +339,44 @@ export default {
         console.error('加载聊天记录失败:', error)
       } finally {
         this.loading = false
+      }
+    },
+
+    // 合并并排序消息
+    mergeAndSortMessages(messages) {
+      const uniqueMessages = []
+      const messageIds = new Set()
+      
+      messages.forEach(msg => {
+        const msgId = msg._id || msg.tempId
+        if (msgId && !messageIds.has(msgId)) {
+          messageIds.add(msgId)
+          uniqueMessages.push(msg)
+          // 将消息ID加入已处理集合，防止重复
+          if (msg._id) {
+            this.processedMsgIds.add(String(msg._id))
+          }
+          if (msg.tempId) {
+            this.processedMsgIds.add(String(msg.tempId))
+          }
+        }
+      })
+      
+      // 按时间排序
+      return uniqueMessages.sort((a, b) => {
+        const timeA = new Date(a.sendTime).getTime()
+        const timeB = new Date(b.sendTime).getTime()
+        return timeA - timeB
+      })
+    },
+
+    // 标记消息已读
+    markMessagesAsRead(chatId) {
+      if (this.localMessages.length > 0) {
+        const lastMsg = this.localMessages[this.localMessages.length - 1]
+        if (String(lastMsg.senderId) !== String(this.userId) && !lastMsg.isRead) {
+          socketService.markMessageRead(chatId, lastMsg.senderId)
+        }
       }
     },
 
@@ -388,15 +392,7 @@ export default {
 
       // 生成临时消息ID用于本地显示
       const tempId = 'temp_' + Date.now()
-      const tempMessage = {
-        _id: tempId,
-        tempId,
-        senderId: this.userId,
-        senderPhoto: this.$store.state.user.userInfo?.photo,
-        content,
-        sendTime: new Date(),
-        isRead: false
-      }
+      const tempMessage = this.createTempMessage(content, tempId)
       
       // 先添加到本地显示
       this.localMessages.push(tempMessage)
@@ -408,22 +404,40 @@ export default {
           content
         })
         // 用真实消息替换临时消息
-        const index = this.localMessages.findIndex(m => m._id === tempId)
-        if (index !== -1) {
-          this.localMessages[index] = {
-            ...res.data,
-            senderPhoto: this.$store.state.user.userInfo?.photo
-          }
-          // 标记消息已处理，防止 socket 回显重复添加
-          if (res.data._id) {
-            this.processedMsgIds.add(String(res.data._id))
-          }
-        }
+        this.replaceTempMessage(tempId, res.data)
       } catch (error) {
         console.error('发送消息失败:', error)
         // 发送失败，移除临时消息
         this.localMessages = this.localMessages.filter(m => m._id !== tempId)
         this.$message.error('发送失败')
+      }
+    },
+
+    // 创建临时消息
+    createTempMessage(content, tempId) {
+      return {
+        _id: tempId,
+        tempId,
+        senderId: this.userId,
+        senderPhoto: this.$store.state.user.userInfo?.photo,
+        content,
+        sendTime: new Date(),
+        isRead: false
+      }
+    },
+
+    // 替换临时消息为真实消息
+    replaceTempMessage(tempId, realMessage) {
+      const index = this.localMessages.findIndex(m => m._id === tempId)
+      if (index !== -1) {
+        this.localMessages[index] = {
+          ...realMessage,
+          senderPhoto: this.$store.state.user.userInfo?.photo
+        }
+        // 标记消息已处理，防止 socket 回显重复添加
+        if (realMessage._id) {
+          this.processedMsgIds.add(String(realMessage._id))
+        }
       }
     },
 
@@ -438,9 +452,12 @@ export default {
     formatTime(time) {
       if (!time) return ''
       const d = new Date(time)
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
       const hours = String(d.getHours()).padStart(2, '0')
       const minutes = String(d.getMinutes()).padStart(2, '0')
-      return `${hours}:${minutes}`
+      return `${year}-${month}-${day} ${hours}:${minutes}`
     },
 
     showAddFriendDialog() {

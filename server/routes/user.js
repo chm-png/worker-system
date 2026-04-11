@@ -1,10 +1,13 @@
 const express = require('express')
 const router = express.Router()
-const { login, getUserInfo, register, getWorkers, searchWorkers, addWorker, changePassword } = require('../controllers/userController')
+const { login, getUserInfo, register, getWorkers, searchWorkers, addWorker, changePassword, refreshToken } = require('../controllers/userController')
 const { authMiddleware, adminMiddleware } = require('../middleware/auth')
 
 // 用户登录（无需鉴权）
 router.post('/login', login)
+
+// 刷新token（无需鉴权）
+router.post('/refresh', refreshToken)
 
 // 注册用户（仅用于初始化）
 router.post('/register', register)

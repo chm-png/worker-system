@@ -4,6 +4,7 @@ const { Server } = require('socket.io')
 const cors = require('cors')
 const mongoose = require('mongoose')
 const dotenv = require('dotenv')
+const cookieParser = require('cookie-parser')
 
 // 加载环境变量
 dotenv.config()
@@ -12,7 +13,7 @@ const config = require('./config')
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler')
 const User = require('./models/User')
 const { encryptPwd } = require('./utils/password')
-const { verifyToken } = require('./utils/jwt')
+const { verifyAccessToken } = require('./utils/jwt')
 
 // 导入路由
 const userRoutes = require('./routes/user')
@@ -42,6 +43,7 @@ app.use(cors({
   origin: config.corsOrigins,
   credentials: true
 }))
+app.use(cookieParser())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
@@ -84,7 +86,7 @@ io.on('connection', async (socket) => {
       return
     }
     
-    const decoded = verifyToken(token)
+    const decoded = verifyAccessToken(token)
     if (!decoded) {
       console.log('Socket token 无效')
       socket.disconnect()

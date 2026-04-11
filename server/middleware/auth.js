@@ -1,4 +1,4 @@
-const { verifyToken } = require('../utils/jwt')
+const { verifyAccessToken } = require('../utils/jwt')
 const User = require('../models/User')
 
 /**
@@ -23,7 +23,7 @@ async function authMiddleware(req, res, next) {
       })
     }
 
-    const decoded = verifyToken(token)
+    const decoded = verifyAccessToken(token)
     
     if (!decoded) {
       return res.status(401).json({
