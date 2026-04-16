@@ -1,5 +1,4 @@
-import { getMyTasks, markTaskRead } from '@/api/task'
-import socketService from '@/utils/socket'
+import { taskService } from '@/services'
 
 const state = {
   tasks: [],
@@ -31,7 +30,7 @@ const mutations = {
 const actions = {
   // 获取我的任务
   async getMyTasks({ commit }) {
-    const res = await getMyTasks()
+    const res = await taskService.getMyTasks()
     commit('SET_TASKS', res.data.tasks)
     commit('SET_UNREAD_COUNT', res.data.unreadCount)
     return res
@@ -39,14 +38,16 @@ const actions = {
 
   // 标记任务已读
   async markTaskRead({ commit }, taskId) {
-    await markTaskRead(taskId)
+    await taskService.markTaskRead(taskId)
     commit('DECREASE_UNREAD')
   },
 
   // 监听新任务
   initSocket({ dispatch }) {
-    socketService.on('new_task', (data) => {
-      dispatch('getMyTasks')
+    import('@/utils/socket').then(({ default: socketService }) => {
+      socketService.on('new_task', (data) => {
+        dispatch('getMyTasks')
+      })
     })
   }
 }

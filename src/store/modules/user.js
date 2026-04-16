@@ -1,5 +1,4 @@
-import { login, getUserInfo } from '@/api/user'
-import socketService from '@/utils/socket'
+import { userService } from '@/services'
 
 const state = {
   token: sessionStorage.getItem('token') || '',
@@ -37,13 +36,8 @@ const mutations = {
 const actions = {
   // 用户登录
   async login({ commit, dispatch }, loginData) {
-    const res = await login(loginData)
-    commit('SET_TOKEN', res.data.token)
-    commit('SET_USER_INFO', res.data.userInfo)
-    // 连接 Socket
-    socketService.connect(res.data.token)
-    // 初始化 Socket 监听
-    dispatch('chat/initSocket', null, { root: true })
+    const res = await userService.login(loginData)
+    userService.handleLoginSuccess(commit, dispatch, res)
     return res
   },
 
@@ -51,12 +45,8 @@ const actions = {
   async getUserInfo({ commit, state, dispatch }) {
     if (!state.token) return
     try {
-      const res = await getUserInfo()
-      commit('SET_USER_INFO', res.data)
-      // 连接 Socket
-      socketService.connect(state.token)
-      // 初始化 Socket 监听
-      dispatch('chat/initSocket', null, { root: true })
+      const res = await userService.getUserInfo(state.token)
+      userService.handleGetUserInfoSuccess(commit, dispatch, res, state.token)
       return res
     } catch (error) {
       commit('CLEAR_USER')
@@ -66,8 +56,7 @@ const actions = {
 
   // 退出登录
   logout({ commit }) {
-    commit('CLEAR_USER')
-    socketService.disconnect()
+    userService.handleLogout(commit)
   }
 }
 

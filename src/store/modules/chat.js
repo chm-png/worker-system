@@ -1,6 +1,5 @@
 import Vue from 'vue'
-import { getFriends, searchFriends, sendFriendRequest, handleFriendRequest, getChatHistory, sendMessage, getPendingRequests } from '@/api/chat'
-import socketService from '@/utils/socket'
+import { chatService } from '@/services'
 
 const state = {
   friends: [],
@@ -114,33 +113,33 @@ const getters = {
 const actions = {
   // 获取好友列表
   async getFriends({ commit }) {
-    const res = await getFriends()
+    const res = await chatService.getFriends()
     commit('SET_FRIENDS', res.data)
     return res
   },
 
   // 搜索好友
   async searchFriends(_, keyword) {
-    const res = await searchFriends(keyword)
+    const res = await chatService.searchFriends(keyword)
     return res
   },
 
   // 获取待处理的好友请求
   async getPendingRequests({ commit }) {
-    const res = await getPendingRequests()
+    const res = await chatService.getPendingRequests()
     commit('SET_PENDING_REQUESTS', res.data)
     return res
   },
 
   // 发送好友请求
   async sendFriendRequest(_, friendId) {
-    const res = await sendFriendRequest(friendId)
+    const res = await chatService.sendFriendRequest(friendId)
     return res
   },
 
   // 处理好友请求
   async handleFriendRequest({ commit, dispatch }, data) {
-    const res = await handleFriendRequest(data)
+    const res = await chatService.handleFriendRequest(data)
     if (res.code === 200) {
       commit('REMOVE_PENDING_REQUEST', data.requestId)
       if (data.action === 'agree') {
@@ -152,51 +151,37 @@ const actions = {
 
   // 获取聊天历史
   async getChatHistory({ commit }, chatId) {
-    const res = await getChatHistory({ chatId })
+    const res = await chatService.getChatHistory({ chatId })
     commit('SET_CURRENT_MESSAGES', res.data)
     return res
   },
 
   // 发送消息
   async sendMessage({ commit }, data) {
-    const res = await sendMessage(data)
+    const res = await chatService.sendMessage(data)
     // 不再自动添加到 currentMessages，由组件自行管理
     return res
   },
 
   // 初始化 Socket 监听
   initSocket({ commit, dispatch }) {
-    // 监听在线状态
-    socketService.on('online_status', (data) => {
-      commit('UPDATE_FRIEND_STATUS', data)
-    })
-
-    // 监听聊天消息
-    socketService.on('chat_message', (data) => {
-      commit('ADD_UNREAD_MESSAGE', {
-        senderId: data.senderId,
-        message: data
-      })
-    })
+    chatService.initSocket(commit)
 
     // 监听消息确认
-    socketService.on('chat_message_ack', (data) => {
-      dispatch('setAckMessage', data)
-    })
+    import('@/utils/socket').then(({ default: socketService }) => {
+      socketService.on('chat_message_ack', (data) => {
+        dispatch('setAckMessage', data)
+      })
 
-    // 监听消息已读
-    socketService.on('message_read', (data) => {
-      commit('UPDATE_MESSAGE_READ', data)
-    })
+      // 监听好友请求
+      socketService.on('friend_request', () => {
+        dispatch('getPendingRequests')
+      })
 
-    // 监听好友请求
-    socketService.on('friend_request', () => {
-      dispatch('getPendingRequests')
-    })
-
-    // 监听好友同意
-    socketService.on('friend_agreed', () => {
-      dispatch('getFriends')
+      // 监听好友同意
+      socketService.on('friend_agreed', () => {
+        dispatch('getFriends')
+      })
     })
 
     commit('SET_SOCKET_INITIALIZED', true)

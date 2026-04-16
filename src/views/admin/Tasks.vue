@@ -170,9 +170,7 @@
 </template>
 
 <script>
-import { getTaskList, createTask } from '@/api/task'
-import { getWorkers } from '@/api/user'
-import socketService from '@/utils/socket'
+import { taskService, employeeService } from '@/services'
 
 export default {
   name: 'AdminTasks',
@@ -251,15 +249,24 @@ export default {
     this.fetchWorkers()
     this.fetchTasks()
     // 监听任务完成事件，实时刷新任务列表
-    socketService.on('task_completed', this.handleTaskCompleted)
+    this.initSocket()
   },
   beforeDestroy() {
-    socketService.off('task_completed', this.handleTaskCompleted)
+    if (this.socketListener) {
+      this.socketListener.off('task_completed', this.handleTaskCompleted)
+    }
   },
   methods: {
+    initSocket() {
+      import('@/utils/socket').then(({ default: socketService }) => {
+        this.socketListener = socketService
+        socketService.on('task_completed', this.handleTaskCompleted)
+      })
+    },
+    
     async fetchWorkers() {
       try {
-        const res = await getWorkers()
+        const res = await employeeService.getWorkers()
         this.workers = res.data
       } catch (error) {
         console.error('获取员工列表失败:', error)
@@ -268,7 +275,7 @@ export default {
     
     async fetchTasks() {
       try {
-        const res = await getTaskList({ size: 50 })
+        const res = await taskService.getTaskList({ size: 50 })
         const list = res.data.list || []
         const newPending = list.filter(t => t.status === 'pending')
         const newCompleted = list.filter(t => t.status === 'completed')
@@ -290,7 +297,7 @@ export default {
       
       this.submitting = true
       try {
-        await createTask(this.taskForm)
+        await taskService.createTask(this.taskForm)
         this.$message.success('任务创建成功，已通过 Socket 推送至员工端')
         this.taskForm = {
           workerId: '',

@@ -91,8 +91,7 @@
 </template>
 
 <script>
-import { getWorkers, addWorker } from '@/api/user'
-import socketService from '@/utils/socket'
+import { employeeService } from '@/services'
 import { getAvatarUrl } from '@/utils/avatar'
 
 export default {
@@ -139,25 +138,21 @@ export default {
     getAvatarUrl,
 
     initSocket() {
-      // 连接Socket
-      socketService.connect(this.$store.state.user.token)
-      // 添加头像更新监听
-      this.addSocketListeners()
-    },
-    addSocketListeners() {
-      // 监听头像更新事件
-      socketService.on('avatar_updated', () => {
+      // 使用员工服务初始化Socket
+      this.socketListener = employeeService.initSocket(() => {
         // 重新获取员工列表，更新头像显示
         this.fetchData()
       })
     },
     removeSocketListeners() {
       // 移除监听
-      socketService.off('avatar_updated')
+      if (this.socketListener && this.socketListener.removeListener) {
+        this.socketListener.removeListener()
+      }
     },
     async fetchData() {
       try {
-        const res = await getWorkers()
+        const res = await employeeService.getWorkers()
         this.workers = res.data
         this.totalCount = res.data.length
       } catch (error) {
@@ -170,9 +165,7 @@ export default {
     },
 
     formatDate(date) {
-      if (!date) return '暂无'
-      const d = new Date(date)
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      return employeeService.formatDate(date)
     },
 
     showAddDialog() {
@@ -192,7 +185,7 @@ export default {
       try {
         await this.$refs.addFormRef.validate()
         this.submitting = true
-        await addWorker(this.addForm)
+        await employeeService.addWorker(this.addForm)
         this.$message.success('员工录入成功！初始密码为123456')
         this.addDialogVisible = false
         this.fetchData()
