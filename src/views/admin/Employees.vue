@@ -60,7 +60,7 @@
     </div>
 
     <!-- 录入员工对话框 -->
-    <el-dialog title="录入新员工" :visible.sync="addDialogVisible" width="500px" :close-on-click-modal="false">
+    <el-dialog title="录入新员工" v-model:visible="addDialogVisible" width="500px" :close-on-click-modal="false">
       <el-form :model="addForm" :rules="addRules" ref="addFormRef" label-width="90px">
         <el-form-item label="员工姓名" prop="name">
           <el-input v-model="addForm.name" placeholder="请输入员工姓名"></el-input>
@@ -82,10 +82,10 @@
           <el-input v-model="addForm.position" placeholder="请输入岗位名称"></el-input>
         </el-form-item>
       </el-form>
-      <span slot="footer">
+      <footer>
         <el-button @click="addDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleAdd" :loading="submitting">确认录入</el-button>
-      </span>
+      </footer>
     </el-dialog>
   </div>
 </template>

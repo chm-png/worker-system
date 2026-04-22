@@ -202,11 +202,8 @@ io.on('connection', async (socket) => {
 
 // 数据库连接
 mongoose.connect(config.mongoUrl)
-  .then(async () => {
+  .then(() => {
     console.log('MongoDB 连接成功')
-    
-    // 初始化演示数据
-    await initDemoData()
     
     // 启动服务器
     server.listen(config.port, () => {
@@ -217,52 +214,6 @@ mongoose.connect(config.mongoUrl)
     console.error('MongoDB 连接失败:', err)
     process.exit(1)
   })
-
-// 初始化演示数据
-async function initDemoData() {
-  try {
-    // 检查是否已有管理员
-    const adminExists = await User.findOne({ role: 'admin' })
-    if (!adminExists) {
-      console.log('正在初始化演示数据...')
-      
-      // 创建管理员
-      const admin = new User({
-        username: 'admin',
-        password: await encryptPwd('admin123'),
-        role: 'admin',
-        name: '张建国',
-        position: '系统管理员',
-        department: '综合管理部'
-      })
-      await admin.save()
-      
-      // 创建员工
-      const workers = [
-        { username: 'lihua', password: '123456', name: '李华', position: '高级电焊工', department: '工程一部' },
-        { username: 'wangqiang', password: '123456', name: '王强', position: '项目组长', department: '工程一部' },
-        { username: 'zhaomeiqi', password: '123456', name: '赵美琪', position: '后勤专员', department: '行政部' },
-        { username: 'chenkun', password: '123456', name: '陈坤', position: '质检员', department: '质检组' },
-        { username: 'zhangsan', password: '123456', name: '张三', position: '机械维修', department: '工程二部' }
-      ]
-      
-      for (const workerData of workers) {
-        const worker = new User({
-          ...workerData,
-          password: await encryptPwd(workerData.password),
-          role: 'worker'
-        })
-        await worker.save()
-      }
-      
-      console.log('演示数据初始化完成')
-      console.log('管理员账号: admin / admin123')
-      console.log('员工账号: lihua / 123456')
-    }
-  } catch (error) {
-    console.error('初始化演示数据失败:', error)
-  }
-}
 
 // 优雅退出
 process.on('SIGTERM', async () => {

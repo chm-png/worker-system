@@ -44,9 +44,10 @@ async function authMiddleware(req, res, next) {
     }
     
     // 将用户信息挂载到请求对象
-    req.user = user
-    req.userId = decoded.userId
-    req.userRole = decoded.role
+    // 将用户信息挂载到请求对象，供后续中间件和路由处理器使用
+    req.user = user          // 完整的用户对象（不含密码）
+    req.userId = decoded.userId  // 用户ID，方便快速访问
+    req.userRole = decoded.role  // 用户角色，用于权限校验
     
     next()
   } catch (error) {

@@ -15,7 +15,7 @@
             v-model="loginForm.username" 
             placeholder="请输入用户名"
             prefix-icon="el-icon-user"
-            @keyup.enter.native="handleLogin"
+            @keyup.enter="handleLogin"
           ></el-input>
         </el-form-item>
 
@@ -26,7 +26,7 @@
             placeholder="请输入密码"
             prefix-icon="el-icon-lock"
             show-password
-            @keyup.enter.native="handleLogin"
+            @keyup.enter="handleLogin"
           ></el-input>
         </el-form-item>
 
@@ -102,10 +102,7 @@ export default {
       })
     },
     
-    fillAccount(username, password) {
-      this.loginForm.username = username
-      this.loginForm.password = password
-    }
+
   }
 }
 </script>
@@ -181,51 +178,7 @@ export default {
   }
 }
 
-.demo-accounts {
-  text-align: center;
-  
-  > p {
-    font-size: 12px;
-    color: #6b7280;
-    margin-bottom: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-  }
-  
-  .accounts-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .account-item {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 10px 16px;
-    background: #1c1c1c;
-    border: 1px solid #262626;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    
-    i {
-      font-size: 16px;
-      color: #2563eb;
-    }
-    
-    span {
-      font-size: 13px;
-      color: #9ca3af;
-    }
-    
-    &:hover {
-      border-color: #2563eb;
-      background: rgba(37, 99, 235, 0.05);
-    }
-  }
-}
+
 
 .login-footer {
   margin-top: 32px;
