@@ -406,7 +406,7 @@ async function searchWorkers(req, res) {
       ]
     }
     
-    const workers = await User.find(query).select('_id name username photo position department')
+    const workers = await User.find(query).select('_id name username photo phone position department onlineStatus status createdAt')
     
     // 转换头像为URL
     const workersWithAvatarUrl = workers.map(worker => ({

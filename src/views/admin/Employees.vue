@@ -8,12 +8,11 @@
       <div class="header-actions">
         <el-input
           v-model="searchKeyword"
-          placeholder="搜索员工"
+          placeholder="搜索员工（回车搜索）"
           class="search-input"
           prefix-icon="el-icon-search"
-          @keyup.enter="handleSearch"
+          @keyup.enter.native="handleSearch"
         ></el-input>
-        <el-button icon="el-icon-search" @click="handleSearch">搜索</el-button>
         <el-button type="primary" icon="el-icon-plus" @click="showAddDialog">录入员工</el-button>
       </div>
     </div>
