@@ -311,6 +311,9 @@ export default {
       this.currentChat = friend
       this.loading = true
 
+      // 清空消息列表，确保切换聊天时从干净状态开始
+      this.localMessages = []
+
       try {
         // 生成 chatId
         const chatId = this.getChatId(this.userId, friend.friendId)
