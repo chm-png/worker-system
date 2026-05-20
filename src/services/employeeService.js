@@ -1,4 +1,4 @@
-import { getWorkers, addWorker } from '@/api/user'
+import { getWorkers, addWorker, searchWorkers } from '@/api/user'
 
 /**
  * 员工服务 - 处理员工相关业务逻辑
@@ -10,6 +10,15 @@ const employeeService = {
    */
   async getWorkers() {
     return await getWorkers()
+  },
+
+  /**
+   * 搜索员工
+   * @param {string} keyword - 搜索关键词
+   * @returns {Promise} 搜索结果
+   */
+  async searchWorkers(keyword) {
+    return await searchWorkers(keyword)
   },
 
   /**
@@ -38,6 +47,8 @@ const employeeService = {
    * @returns {Object} 监听对象，包含移除方法
    */
   initSocket(callback) {
+    let removeListener = null
+    
     import('@/utils/socket').then(({ default: socketService }) => {
       // 连接Socket
       const token = sessionStorage.getItem('token')
@@ -48,12 +59,18 @@ const employeeService = {
       // 添加头像更新监听
       socketService.on('avatar_updated', callback)
 
-      return {
-        removeListener() {
-          socketService.off('avatar_updated')
-        }
+      removeListener = () => {
+        socketService.off('avatar_updated')
       }
     })
+
+    return {
+      removeListener() {
+        if (removeListener) {
+          removeListener()
+        }
+      }
+    }
   }
 }
 

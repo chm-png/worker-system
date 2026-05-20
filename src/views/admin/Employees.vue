@@ -5,7 +5,16 @@
         <h3>全体员工名册</h3>
         <p>当前共有 {{ totalCount }} 名员工在职</p>
       </div>
-      <el-button type="primary" icon="el-icon-plus" @click="showAddDialog">录入员工</el-button>
+      <div class="header-actions">
+        <el-input
+          v-model="searchKeyword"
+          placeholder="搜索员工"
+          class="search-input"
+          prefix-icon="el-icon-search"
+          @keyup.enter="handleSearch"
+        ></el-input>
+        <el-button type="primary" icon="el-icon-plus" @click="showAddDialog">录入员工</el-button>
+      </div>
     </div>
 
     <div class="employees-grid">
@@ -60,7 +69,7 @@
     </div>
 
     <!-- 录入员工对话框 -->
-    <el-dialog title="录入新员工" v-model:visible="addDialogVisible" width="500px" :close-on-click-modal="false">
+    <el-dialog title="录入新员工" :visible.sync="addDialogVisible" width="500px" :close-on-click-modal="false">
       <el-form :model="addForm" :rules="addRules" ref="addFormRef" label-width="90px">
         <el-form-item label="员工姓名" prop="name">
           <el-input v-model="addForm.name" placeholder="请输入员工姓名"></el-input>
@@ -113,6 +122,7 @@ export default {
       expandedId: null,
       addDialogVisible: false,
       submitting: false,
+      searchKeyword: '',
       addForm: {
         name: '',
         phone: '',
@@ -181,6 +191,21 @@ export default {
       }
     },
 
+    async handleSearch() {
+      try {
+        if (!this.searchKeyword.trim()) {
+          // 如果搜索关键词为空，加载全部员工
+          await this.fetchData()
+          return
+        }
+        const res = await employeeService.searchWorkers(this.searchKeyword)
+        this.workers = res.data
+        this.totalCount = res.data.length
+      } catch (error) {
+        console.error('搜索员工失败:', error)
+      }
+    },
+
     async handleAdd() {
       try {
         await this.$refs.addFormRef.validate()
@@ -217,6 +242,16 @@ export default {
     font-weight: 700;
     color: #e5e7eb;
     margin-bottom: 4px;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .search-input {
+    width: 200px;
   }
 
   p {

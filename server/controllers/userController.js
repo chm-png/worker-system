@@ -376,11 +376,20 @@ async function searchWorkers(req, res) {
   try {
     const { keyword } = req.query
     
-    const workers = await User.find({
+    // 同时搜索工号(username)和姓名(name)
+    const query = {
       role: 'worker',
-      status: true,
-      username: { $regex: keyword || '', $options: 'i' }
-    }).select('_id name username photo position department')
+      status: true
+    }
+    
+    if (keyword && keyword.trim()) {
+      query.$or = [
+        { username: { $regex: keyword, $options: 'i' } },
+        { name: { $regex: keyword, $options: 'i' } }
+      ]
+    }
+    
+    const workers = await User.find(query).select('_id name username photo position department')
     
     // 转换头像为URL
     const workersWithAvatarUrl = workers.map(worker => ({

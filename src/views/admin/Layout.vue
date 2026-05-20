@@ -50,10 +50,6 @@
           <span class="date">{{ currentDate }}</span>
         </div>
         <div class="top-actions">
-          <div class="search-box">
-            <i class="el-icon-search"></i>
-            <input type="text" placeholder="搜索员工或工号..." />
-          </div>
           <div class="notification-badge" @click="openNotificationPanel">
             <el-badge :value="notificationCount" :hidden="notificationCount === 0">
               <i class="el-icon-bell"></i>
@@ -400,30 +396,6 @@ export default {
     display: flex;
     align-items: center;
     gap: 20px;
-
-    .search-box {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: #1a1a1a;
-      padding: 8px 16px;
-      border-radius: 10px;
-      border: 1px solid #333;
-
-      i {
-        color: #6b7280;
-        font-size: 16px;
-      }
-
-      input {
-        background: transparent;
-        border: none;
-        outline: none;
-        color: #e5e7eb;
-        font-size: 14px;
-        width: 180px;
-      }
-    }
 
     .notification-badge {
       cursor: pointer;
