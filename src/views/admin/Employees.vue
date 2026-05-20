@@ -13,6 +13,7 @@
           prefix-icon="el-icon-search"
           @keyup.enter="handleSearch"
         ></el-input>
+        <el-button icon="el-icon-search" @click="handleSearch">搜索</el-button>
         <el-button type="primary" icon="el-icon-plus" @click="showAddDialog">录入员工</el-button>
       </div>
     </div>

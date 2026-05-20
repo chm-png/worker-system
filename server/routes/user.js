@@ -15,11 +15,11 @@ router.post('/register', register)
 // 获取当前用户信息
 router.get('/user/info', authMiddleware, getUserInfo)
 
-// 获取所有员工列表
-router.get('/workers', authMiddleware, getWorkers)
+// 获取所有员工列表（管理员）
+router.get('/workers', authMiddleware, adminMiddleware, getWorkers)
 
-// 搜索员工
-router.get('/search', authMiddleware, searchWorkers)
+// 搜索员工（管理员）
+router.get('/search', authMiddleware, adminMiddleware, searchWorkers)
 
 // 添加员工（管理员）
 router.post('/workers/add', authMiddleware, adminMiddleware, addWorker)
