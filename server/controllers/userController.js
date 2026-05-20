@@ -256,6 +256,14 @@ async function getWorkers(req, res) {
 }
 
 /**
+ * 生成4位随机工号
+ * @returns {string} 4位工号
+ */
+function generateWorkerId() {
+  return Math.floor(Math.random() * 10000).toString().padStart(4, '0')
+}
+
+/**
  * 添加员工（管理员用）
  */
 async function addWorker(req, res) {
@@ -270,17 +278,26 @@ async function addWorker(req, res) {
       })
     }
 
-    // 生成工号（用户名）：使用姓名拼音首字母 + 随机数
-    const pinyin = name.charAt(0)
-    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0')
-    const username = `${pinyin}${randomNum}`
+    // 生成工号：4位随机数，带去重重试机制
+    let username = null
+    const maxRetries = 10 // 最大重试次数
+    let retries = 0
 
-    // 检查工号是否已存在
-    const existingUser = await User.findOne({ username })
-    if (existingUser) {
+    while (!username && retries < maxRetries) {
+      const workerId = generateWorkerId()
+      const existingUser = await User.findOne({ username: workerId })
+      
+      if (!existingUser) {
+        username = workerId
+      } else {
+        retries++
+      }
+    }
+
+    if (!username) {
       return res.status(400).json({
         code: 400,
-        msg: '工号生成冲突，请重试',
+        msg: '工号生成失败，系统工号资源不足，请联系管理员',
         data: null
       })
     }
