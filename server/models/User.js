@@ -53,6 +53,14 @@ const userSchema = new mongoose.Schema({
   refreshToken: {
     type: String,
     default: ''
+  },
+  loginTime: {
+    type: Date,
+    default: null
+  },
+  loginDevice: {
+    type: String,
+    default: ''
   }
 }, {
   timestamps: true

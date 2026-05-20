@@ -20,6 +20,9 @@ const mutations = {
       state.tasks.unshift(task)
     }
   },
+  INCREASE_UNREAD(state) {
+    state.unreadCount++
+  },
   DECREASE_UNREAD(state) {
     if (state.unreadCount > 0) {
       state.unreadCount--
@@ -43,10 +46,12 @@ const actions = {
   },
 
   // 监听新任务
-  initSocket({ dispatch }) {
+  initSocket({ commit, dispatch }) {
     import('@/utils/socket').then(({ default: socketService }) => {
       socketService.on('new_task', (data) => {
-        dispatch('getMyTasks')
+        // 直接添加新任务到列表顶部，保证响应式更新
+        commit('UPDATE_TASK', data.task)
+        commit('SET_UNREAD_COUNT', (state) => state.unreadCount + 1)
       })
     })
   }

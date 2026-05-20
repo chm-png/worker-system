@@ -55,15 +55,33 @@ function isTokenExpiring() {
   return timeLeft <= 0 || timeLeft < 30 * 1000
 }
 
+// 检查是否为单点登录错误
+function isSSOError(message) {
+  return message && message.includes('已在其他设备登录')
+}
+
+// 处理单点登录错误
+function handleSSOError() {
+  sessionStorage.clear()
+  // 清除cookie中的refreshToken
+  document.cookie = 'refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+  Message({
+    message: '您的账号已在其他设备登录，请重新登录',
+    type: 'error',
+    duration: 5000
+  })
+  if (router.currentRoute.path !== '/login') {
+    router.push('/login')
+  }
+}
+
 // 刷新token
 async function refreshToken() {
   try {
     const response = await axios.post(`${BASE_URL}/refresh`, {}, {
-      // 不使用拦截器，避免循环调用
       headers: {
         'Content-Type': 'application/json'
       },
-      // 允许携带凭证（cookies）
       withCredentials: true
     })
     if (response.data.code === 200) {
@@ -71,17 +89,26 @@ async function refreshToken() {
       sessionStorage.setItem('token', newToken)
       return newToken
     } else {
+      // 检查是否为单点登录错误
+      if (isSSOError(response.data.msg)) {
+        handleSSOError()
+        throw new Error(response.data.msg)
+      }
       throw new Error('刷新token失败')
     }
   } catch (error) {
-      // 刷新token失败，清除token并跳转到登录页
+    // 检查响应数据中的单点登录错误
+    const errorMsg = error.response?.data?.msg || error.message
+    if (isSSOError(errorMsg)) {
+      handleSSOError()
+    } else {
       sessionStorage.clear()
-      // 避免重复导航到登录页面
       if (router.currentRoute.path !== '/login') {
         router.push('/login')
       }
-      throw error
     }
+    throw error
+  }
 }
 
 // 请求拦截器
@@ -129,18 +156,21 @@ service.interceptors.response.use(
         })
       }
       
-      // token 过期，尝试刷新token
+      // token 过期或单点登录错误
       if (res.code === 401) {
+        // 检查是否为单点登录错误
+        if (isSSOError(res.msg)) {
+          handleSSOError()
+          return Promise.reject(new Error(res.msg))
+        }
+        
         // 只有在非登录页面时才尝试刷新token
         if (router.currentRoute.path !== '/login') {
-          // 尝试刷新token
           return refreshToken().then(newToken => {
-            // 刷新成功，重新发起请求
             const config = response.config
             config.headers['Authorization'] = `Bearer ${newToken}`
             return service(config)
           }).catch(() => {
-            // 刷新token失败，清除sessionStorage并跳转登录
             sessionStorage.clear()
             router.push('/login')
             return Promise.reject(new Error('登录已过期，请重新登录'))
@@ -162,22 +192,25 @@ service.interceptors.response.use(
     if (error.response) {
       switch (error.response.status) {
         case 401:
-          message = '登录已过期，请重新登录'
-          // 只有在非登录页面时才尝试刷新token
-          if (router.currentRoute.path !== '/login') {
-            shouldShowMessage = false // 不显示错误消息，因为会尝试刷新token
-            // 尝试刷新token
-            return refreshToken().then(newToken => {
-              // 刷新成功，重新发起请求
-              const config = error.config
-              config.headers['Authorization'] = `Bearer ${newToken}`
-              return service(config)
-            }).catch(() => {
-              // 刷新token失败，清除sessionStorage并跳转登录
-              sessionStorage.clear()
-              router.push('/login')
-              return Promise.reject(new Error('登录已过期，请重新登录'))
-            })
+          // 检查是否为单点登录错误
+          if (isSSOError(error.response.data?.msg)) {
+            message = error.response.data.msg
+            handleSSOError()
+          } else {
+            message = '登录已过期，请重新登录'
+            // 只有在非登录页面时才尝试刷新token
+            if (router.currentRoute.path !== '/login') {
+              shouldShowMessage = false
+              return refreshToken().then(newToken => {
+                const config = error.config
+                config.headers['Authorization'] = `Bearer ${newToken}`
+                return service(config)
+              }).catch(() => {
+                sessionStorage.clear()
+                router.push('/login')
+                return Promise.reject(new Error('登录已过期，请重新登录'))
+              })
+            }
           }
           break
         case 403:

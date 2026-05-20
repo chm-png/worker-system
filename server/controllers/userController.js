@@ -56,9 +56,30 @@ async function login(req, res) {
       userId: user._id
     })
     
-    // 保存refreshToken到数据库
+    // 保存refreshToken到数据库（覆盖旧token，实现单点登录）
     user.refreshToken = refreshToken
+    user.loginTime = new Date()
+    // 记录登录设备信息（从User-Agent提取）
+    const userAgent = req.headers['user-agent'] || ''
+    if (userAgent.includes('Mobile') || userAgent.includes('Android') || userAgent.includes('iPhone')) {
+      user.loginDevice = 'mobile'
+    } else {
+      user.loginDevice = 'desktop'
+    }
     await user.save()
+    
+    // 主动断开该用户的其他Socket连接（实现单点登录）
+    const io = req.app.get('io')
+    if (io) {
+      const sockets = await io.fetchSockets()
+      sockets.forEach(socket => {
+        if (socket.userId && socket.userId.toString() === user._id.toString() && socket.id !== req.socketId) {
+          socket.emit('sso_error', { message: '您的账号已在其他设备登录，请重新登录' })
+          socket.disconnect(true)
+          console.log(`用户 ${user._id} 的旧连接已断开`)
+        }
+      })
+    }
     
     // 设置refreshToken到cookie
     res.cookie('refreshToken', refreshToken, {
@@ -122,10 +143,19 @@ async function refreshToken(req, res) {
     
     // 查找用户
     const user = await User.findById(decoded.userId)
-    if (!user || user.refreshToken !== refreshToken) {
+    if (!user) {
       return res.status(401).json({
         code: 401,
-        msg: '用户不存在或refreshToken已失效',
+        msg: '用户不存在',
+        data: null
+      })
+    }
+    
+    // 单点登录校验：如果数据库中的refreshToken与请求中的不一致，说明账号已在其他设备登录
+    if (user.refreshToken !== refreshToken) {
+      return res.status(401).json({
+        code: 401,
+        msg: '您的账号已在其他设备登录，请重新登录',
         data: null
       })
     }

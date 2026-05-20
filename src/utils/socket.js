@@ -1,5 +1,6 @@
 import { io } from 'socket.io-client'
 import { Message } from 'element-ui'
+import router from '@/router'
 
 class SocketService {
   constructor() {
@@ -59,6 +60,22 @@ class SocketService {
         type: 'error',
         duration: 3000
       })
+    })
+
+    // 监听单点登录错误（账号在其他设备登录）
+    this.socket.on('sso_error', (data) => {
+      console.error('Socket 单点登录错误:', data)
+      Message({
+        message: data.message || '您的账号已在其他设备登录，请重新登录',
+        type: 'error',
+        duration: 5000
+      })
+      // 清除本地存储并跳转登录页
+      sessionStorage.clear()
+      document.cookie = 'refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+      if (router.currentRoute.path !== '/login') {
+        router.push('/login')
+      }
     })
 
     // 监听新任务

@@ -64,7 +64,7 @@
               {{ task.status === 'completed' ? '已完成' : (task.status === 'pending' ? '待完成' : '未开始') }}
             </span>
             <el-button
-              v-if="task.status === 'pending' && !isHistoricalView"
+              v-if="task.status === 'pending'"
               type="primary"
               size="small"
               @click="openSubmitDialog(task)"
