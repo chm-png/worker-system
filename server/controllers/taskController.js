@@ -1,6 +1,7 @@
 const Task = require('../models/Task')
 const { formatDate } = require('../utils/time')
 const { decodeOriginalFilename } = require('../utils/filenameEncoding')
+const { getCache, setCache, deleteCachePattern } = require('../utils/redis')
 
 function mapUploadAttachments(attachments) {
   if (!Array.isArray(attachments)) return []
@@ -48,6 +49,10 @@ async function createTask(req, res) {
     
     await task.save()
     
+    // 清除相关任务缓存
+    await deleteCachePattern('tasks:*')
+    console.log('[Cache] 创建任务后清除任务缓存')
+    
     // 通过 Socket 推送新任务给员工
     const io = req.app.get('io')
     if (io) {
@@ -82,6 +87,16 @@ async function getTaskList(req, res) {
   try {
     const { page = 1, size = 20, workerId, status } = req.query
     
+    // 生成缓存键
+    const cacheKey = `tasks:list:admin:${page}:${size}:${workerId || 'all'}:${status || 'all'}`
+    
+    // 尝试从缓存获取
+    const cachedData = await getCache(cacheKey)
+    if (cachedData) {
+      console.log(`[Cache] 命中任务列表缓存: ${cacheKey}`)
+      return res.json(cachedData)
+    }
+    
     const query = {}
     if (workerId) query.workerId = workerId
     if (status) query.status = status
@@ -96,7 +111,7 @@ async function getTaskList(req, res) {
     
     const total = await Task.countDocuments(query)
     
-    res.json({
+    const result = {
       code: 200,
       msg: '获取成功',
       data: {
@@ -118,7 +133,12 @@ async function getTaskList(req, res) {
           createdAt: item.createdAt
         }))
       }
-    })
+    }
+    
+    // 缓存结果（5分钟）
+    await setCache(cacheKey, result, 300)
+    
+    res.json(result)
   } catch (error) {
     console.error('Get task list error:', error)
     res.status(500).json({
@@ -183,7 +203,18 @@ async function getTaskDetail(req, res) {
 async function getMyTasks(req, res) {
   try {
     const userId = req.userId
+    
+    // 生成缓存键（包含日期，每天一个缓存）
     const today = formatDate()
+    const cacheKey = `tasks:my:${userId}:${today}`
+    
+    // 尝试从缓存获取
+    const cachedData = await getCache(cacheKey)
+    if (cachedData) {
+      console.log(`[Cache] 命中我的任务缓存: ${cacheKey}`)
+      return res.json(cachedData)
+    }
+    
     const startOfDay = new Date(today + 'T00:00:00')
     const endOfDay = new Date(today + 'T23:59:59')
     
@@ -195,7 +226,7 @@ async function getMyTasks(req, res) {
     // 统计未读任务数
     const unreadCount = tasks.filter(t => !t.isRead && t.status === 'pending').length
     
-    res.json({
+    const result = {
       code: 200,
       msg: '获取成功',
       data: {
@@ -211,7 +242,12 @@ async function getMyTasks(req, res) {
           createdAt: item.createdAt
         }))
       }
-    })
+    }
+    
+    // 缓存结果（3分钟）
+    await setCache(cacheKey, result, 180)
+    
+    res.json(result)
   } catch (error) {
     console.error('Get my tasks error:', error)
     res.status(500).json({
@@ -302,6 +338,10 @@ async function finishTask(req, res) {
         data: null
       })
     }
+    
+    // 清除相关任务缓存
+    await deleteCachePattern('tasks:*')
+    console.log('[Cache] 完成任务后清除任务缓存')
     
     // 通过 Socket 推送任务完成消息给管理员
     const io = req.app.get('io')

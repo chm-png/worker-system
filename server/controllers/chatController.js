@@ -2,6 +2,7 @@ const FriendRelation = require('../models/FriendRelation')
 const ChatRecord = require('../models/ChatRecord')
 const User = require('../models/User')
 const mongoose = require('mongoose')
+const { getCache, setCache, deleteCachePattern } = require('../utils/redis')
 
 /**
  * 生成聊天会话ID（两个用户ID按字典序拼接）
@@ -61,6 +62,14 @@ async function searchFriends(req, res) {
 async function getFriends(req, res) {
   try {
     const userId = req.userId
+    const cacheKey = `friends:${userId}`
+
+    // 尝试从缓存获取
+    const cachedData = await getCache(cacheKey)
+    if (cachedData) {
+      console.log(`[Cache] 命中好友列表缓存: ${cacheKey}`)
+      return res.json(cachedData)
+    }
 
     // 找到所有已同意的好友关系
     const relations = await FriendRelation.find({
@@ -86,11 +95,16 @@ async function getFriends(req, res) {
         }
       })
 
-    res.json({
+    const result = {
       code: 200,
       msg: '获取成功',
       data: friends
-    })
+    }
+
+    // 缓存结果（5分钟）
+    await setCache(cacheKey, result, 300)
+
+    res.json(result)
   } catch (error) {
     console.error('Get friends error:', error)
     res.status(500).json({
@@ -107,6 +121,14 @@ async function getFriends(req, res) {
 async function getPendingRequests(req, res) {
   try {
     const userId = req.userId
+    const cacheKey = `pending_requests:${userId}`
+
+    // 尝试从缓存获取
+    const cachedData = await getCache(cacheKey)
+    if (cachedData) {
+      console.log(`[Cache] 命中待处理请求缓存: ${cacheKey}`)
+      return res.json(cachedData)
+    }
 
     // 找到发给当前用户的好友请求（状态为 pending）
     const relations = await FriendRelation.find({
@@ -125,11 +147,16 @@ async function getPendingRequests(req, res) {
       createdAt: rel.createdAt
     }))
 
-    res.json({
+    const result = {
       code: 200,
       msg: '获取成功',
       data: requests
-    })
+    }
+
+    // 缓存结果（3分钟）
+    await setCache(cacheKey, result, 180)
+
+    res.json(result)
   } catch (error) {
     console.error('Get pending requests error:', error)
     res.status(500).json({
@@ -228,32 +255,36 @@ async function sendFriendRequest(req, res) {
         }
       }
       // 如果是被拒绝的关系，更新为新的请求
-      if (existingRelation.status === 'rejected') {
-        existingRelation.status = 'pending'
-        existingRelation.userId = userId
-        existingRelation.friendId = targetFriendId
-        existingRelation.agreeTime = null
-        await existingRelation.save()
-        
-        // 获取用户信息用于推送
-        const user = await User.findById(userId).select('name photo')
-        
-        // 通过 Socket 推送好友请求
-        const io = req.app.get('io')
-        if (io) {
-          io.to(targetStr).emit('friend_request', {
-            userId: userId,
-            name: user.name,
-            photo: user.photo ? `/api/upload/avatar/${user._id}?t=${Date.now()}` : ''
-          })
-        }
-        
-        return res.json({
-          code: 200,
-          msg: '好友请求已发送',
-          data: { status: 'pending' }
+    if (existingRelation.status === 'rejected') {
+      existingRelation.status = 'pending'
+      existingRelation.userId = userId
+      existingRelation.friendId = targetFriendId
+      existingRelation.agreeTime = null
+      await existingRelation.save()
+      
+      // 清除接收者的待处理请求缓存
+      await deleteCachePattern(`pending_requests:${targetStr}`)
+      console.log(`[Cache] 重新发送好友请求后清除缓存: ${targetStr}`)
+      
+      // 获取用户信息用于推送
+      const user = await User.findById(userId).select('name photo')
+      
+      // 通过 Socket 推送好友请求
+      const io = req.app.get('io')
+      if (io) {
+        io.to(targetStr).emit('friend_request', {
+          userId: userId,
+          name: user.name,
+          photo: user.photo ? `/api/upload/avatar/${user._id}?t=${Date.now()}` : ''
         })
       }
+      
+      return res.json({
+        code: 200,
+        msg: '好友请求已发送',
+        data: { status: 'pending' }
+      })
+    }
     }
 
     // 创建好友关系
@@ -265,6 +296,10 @@ async function sendFriendRequest(req, res) {
 
     await relation.save()
     console.log('sendFriendRequest - relation created:', relation._id)
+
+    // 清除接收者的待处理请求缓存
+    await deleteCachePattern(`pending_requests:${targetStr}`)
+    console.log(`[Cache] 发送好友请求后清除缓存: ${targetStr}`)
 
     // 获取用户信息用于推送
     const user = await User.findById(userId).select('name photo')
@@ -322,6 +357,12 @@ async function handleFriendRequest(req, res) {
       relation.agreeTime = new Date()
       await relation.save()
       
+      // 清除双方的好友列表缓存和当前用户的待处理请求缓存
+      await deleteCachePattern(`friends:${userId}`)
+      await deleteCachePattern(`friends:${requesterId}`)
+      await deleteCachePattern(`pending_requests:${userId}`)
+      console.log(`[Cache] 同意好友请求后清除缓存: ${userId}, ${requesterId}`)
+      
       // 获取用户信息用于推送
       const user = await User.findById(userId).select('name photo')
       
@@ -343,6 +384,10 @@ async function handleFriendRequest(req, res) {
     } else if (action === 'reject') {
       relation.status = 'rejected'
       await relation.save()
+      
+      // 清除当前用户的待处理请求缓存
+      await deleteCachePattern(`pending_requests:${userId}`)
+      console.log(`[Cache] 拒绝好友请求后清除缓存: ${userId}`)
       
       // 推送拒绝消息
       const io = req.app.get('io')
@@ -381,6 +426,19 @@ async function getChatHistory(req, res) {
   try {
     const { chatId, page = 1, size = 50 } = req.query
     const userId = req.userId
+    const cacheKey = `chat_history:${chatId}:${page}:${size}`
+    
+    // 尝试从缓存获取
+    const cachedData = await getCache(cacheKey)
+    if (cachedData) {
+      console.log(`[Cache] 命中聊天历史缓存: ${cacheKey}`)
+      // 即使有缓存，也需要标记消息为已读
+      await ChatRecord.updateMany(
+        { chatId, receiverId: userId, isRead: false },
+        { isRead: true }
+      )
+      return res.json(cachedData)
+    }
     
     const skip = (parseInt(page) - 1) * parseInt(size)
     
@@ -396,7 +454,7 @@ async function getChatHistory(req, res) {
       { isRead: true }
     )
     
-    res.json({
+    const result = {
       code: 200,
       msg: '获取成功',
       data: records.reverse().map(item => ({
@@ -410,7 +468,12 @@ async function getChatHistory(req, res) {
         isRead: item.isRead,
         sendTime: item.sendTime
       }))
-    })
+    }
+    
+    // 缓存结果（5分钟）
+    await setCache(cacheKey, result, 300)
+    
+    res.json(result)
   } catch (error) {
     console.error('Get chat history error:', error)
     res.status(500).json({
@@ -459,6 +522,10 @@ async function sendMessage(req, res) {
     })
     
     await chatRecord.save()
+    
+    // 清除该聊天会话的所有历史记录缓存
+    await deleteCachePattern(`chat_history:${chatId}:*`)
+    console.log(`[Cache] 发送消息后清除聊天缓存: ${chatId}`)
     
     // 获取发送者信息
     const sender = await User.findById(senderId).select('name photo')

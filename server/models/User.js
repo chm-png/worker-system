@@ -67,7 +67,6 @@ const userSchema = new mongoose.Schema({
 })
 
 // 创建索引
-userSchema.index({ username: 1 }, { unique: true })
 userSchema.index({ role: 1 })
 userSchema.index({ onlineStatus: 1 })
 

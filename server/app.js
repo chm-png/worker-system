@@ -9,6 +9,9 @@ const cookieParser = require('cookie-parser')
 // 加载环境变量
 dotenv.config()
 
+// Redis 初始化
+const { initRedis, closeRedis } = require('./utils/redis')
+
 const config = require('./config')
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler')
 const User = require('./models/User')
@@ -205,6 +208,18 @@ mongoose.connect(config.mongoUrl)
   .then(() => {
     console.log('MongoDB 连接成功')
     
+    // 初始化 Redis（如果配置了 REDIS_ENABLED=true）
+    if (process.env.REDIS_ENABLED === 'true') {
+      try {
+        initRedis()
+        console.log('Redis 缓存已启用')
+      } catch (error) {
+        console.warn('Redis 连接失败，将使用无缓存模式:', error.message)
+      }
+    } else {
+      console.log('Redis 缓存未启用')
+    }
+    
     // 启动服务器
     server.listen(config.port, () => {
       console.log(`服务器运行在 http://localhost:${config.port}`)
@@ -219,6 +234,7 @@ mongoose.connect(config.mongoUrl)
 process.on('SIGTERM', async () => {
   console.log('收到 SIGTERM 信号，正在关闭...')
   await mongoose.connection.close()
+  await closeRedis()
   server.close(() => {
     console.log('服务器已关闭')
     process.exit(0)

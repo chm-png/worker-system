@@ -55,7 +55,6 @@ const taskSchema = new mongoose.Schema({
 })
 
 // 索引
-taskSchema.index({ taskId: 1 }, { unique: true })
 taskSchema.index({ workerId: 1, status: 1, createdAt: -1 })
 
 module.exports = mongoose.model('Task', taskSchema)

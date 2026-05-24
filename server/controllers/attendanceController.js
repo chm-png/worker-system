@@ -2,6 +2,7 @@ const Attendance = require('../models/Attendance')
 const User = require('../models/User')
 const config = require('../config')
 const { formatDate, formatTime } = require('../utils/time')
+const { getCache, setCache, deleteCachePattern } = require('../utils/redis')
 
 /**
  * 获取考勤统计数据（管理员用）
@@ -11,6 +12,13 @@ const { formatDate, formatTime } = require('../utils/time')
 async function getAttendanceStats(req, res) {
   try {
     const currentMonth = formatDate().substring(0, 7) // YYYY-MM
+    const cacheKey = `attendance:stats:${currentMonth}`
+
+    const cachedData = await getCache(cacheKey)
+    if (cachedData) {
+      console.log(`[Cache] 命中考勤统计缓存: ${cacheKey}`)
+      return res.json(cachedData)
+    }
 
     const totalWorkers = await User.countDocuments({ role: 'worker', status: true })
     const monthAttendance = await Attendance.find({ date: currentMonth }).lean()
@@ -43,7 +51,7 @@ async function getAttendanceStats(req, res) {
       ? (totalPresent / totalMonthDays * 100).toFixed(1)
       : 0
 
-    res.json({
+    const result = {
       code: 200,
       msg: '获取成功',
       data: {
@@ -55,7 +63,11 @@ async function getAttendanceStats(req, res) {
         totalWorkers,
         date: currentMonth
       }
-    })
+    }
+
+    await setCache(cacheKey, result, 120)
+
+    res.json(result)
   } catch (error) {
     console.error('Get attendance stats error:', error)
     res.status(500).json({ code: 500, msg: '服务器内部错误', data: null })
@@ -69,6 +81,14 @@ async function getAttendanceList(req, res) {
   try {
     const { page = 1, size = 20, name, position } = req.query
     const currentMonth = formatDate().substring(0, 7)
+
+    const cacheKey = `attendance:list:${currentMonth}:${page}:${size}:${name || 'all'}:${position || 'all'}`
+
+    const cachedData = await getCache(cacheKey)
+    if (cachedData) {
+      console.log(`[Cache] 命中考勤列表缓存: ${cacheKey}`)
+      return res.json(cachedData)
+    }
 
     let workerQuery = { role: 'worker', status: true }
     if (name) {
@@ -112,7 +132,11 @@ async function getAttendanceList(req, res) {
       }
     })
 
-    res.json({ code: 200, msg: '获取成功', data: { total, list } })
+    const result = { code: 200, msg: '获取成功', data: { total, list } }
+
+    await setCache(cacheKey, result, 120)
+
+    res.json(result)
   } catch (error) {
     console.error('Get attendance list error:', error)
     res.status(500).json({ code: 500, msg: '服务器内部错误', data: null })
@@ -146,6 +170,9 @@ async function updateAttendance(req, res) {
         todayStatus: record.todayStatus
       })
     }
+
+    await deleteCachePattern('attendance:*')
+    console.log('[Cache] 修改考勤后清除考勤缓存')
 
     res.json({ code: 200, msg: '修改成功', data: record })
   } catch (error) {
@@ -205,6 +232,9 @@ async function clockIn(req, res) {
     })
     
     await attendance.save()
+
+    await deleteCachePattern('attendance:*')
+    console.log('[Cache] 打卡成功后清除考勤缓存')
     
     res.json({
       code: 200,
@@ -290,7 +320,7 @@ async function getAttendanceExport(req, res) {
     // 添加 BOM 以支持 Excel 打开 UTF-8 CSV
     const bom = '\uFEFF'
     res.setHeader('Content-Type', 'text/csv;charset=utf-8')
-    res.setHeader('Content-Disposition', `attachment; filename=考勤日报表_${targetDate}.csv`)
+    res.setHeader('Content-Disposition', `attachment; filename=${encodeURIComponent(`考勤日报表_${targetDate}.csv`)}`)
     res.end(bom + csvContent)
   } catch (error) {
     console.error('Export attendance error:', error)

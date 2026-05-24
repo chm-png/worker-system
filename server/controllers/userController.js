@@ -1,6 +1,7 @@
 const User = require('../models/User')
 const { encryptPwd, comparePwd } = require('../utils/password')
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/jwt')
+const { getCache, setCache, deleteCachePattern } = require('../utils/redis')
 
 /**
  * 用户登录
@@ -261,6 +262,14 @@ async function register(req, res) {
  */
 async function getWorkers(req, res) {
   try {
+    const cacheKey = 'workers:list'
+    
+    const cachedData = await getCache(cacheKey)
+    if (cachedData) {
+      console.log(`[Cache] 命中员工列表缓存: ${cacheKey}`)
+      return res.json(cachedData)
+    }
+
     const workers = await User.find({ role: 'worker' })
       .select('_id name username photo phone position department onlineStatus status createdAt')
       .sort({ createdAt: -1 })
@@ -271,11 +280,15 @@ async function getWorkers(req, res) {
       photo: worker.photo ? `/api/upload/avatar/${worker._id}?t=${Date.now()}` : ''
     }))
 
-    res.json({
+    const result = {
       code: 200,
       msg: '获取成功',
       data: workersWithAvatarUrl
-    })
+    }
+
+    await setCache(cacheKey, result, 300)
+
+    res.json(result)
   } catch (error) {
     res.status(500).json({
       code: 500,
@@ -345,6 +358,9 @@ async function addWorker(req, res) {
     })
 
     await user.save()
+
+    await deleteCachePattern('workers:*')
+    console.log('[Cache] 添加员工后清除员工列表缓存')
 
     res.json({
       code: 200,

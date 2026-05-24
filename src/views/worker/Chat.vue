@@ -162,6 +162,7 @@
 import { mapState, mapActions, mapGetters } from 'vuex'
 import socketService from '@/utils/socket'
 import { getAvatarUrl } from '@/utils/avatar'
+import { debounce } from '@/utils/debounce'
 
 export default {
   name: 'WorkerChat',
@@ -469,7 +470,7 @@ export default {
       this.searchResults = []
     },
 
-    async handleFriendSearch() {
+    handleFriendSearch: debounce(async function() {
       if (!this.friendSearchKeyword.trim()) {
         this.searchResults = []
         return
@@ -481,7 +482,7 @@ export default {
       } catch (error) {
         console.error('搜索失败:', error)
       }
-    },
+    }, 200),
 
     async handleAddFriend(friendId) {
       try {

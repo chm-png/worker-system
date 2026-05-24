@@ -83,6 +83,16 @@ module.exports = {
     }
 
     config.resolve.alias['@'] = path.resolve(__dirname, '.')
+
+    // CDN externals - 告诉webpack这些库已通过CDN引入
+    config.externals = {
+      'vue': 'Vue',
+      'vue-router': 'VueRouter',
+      'vuex': 'Vuex',
+      'axios': 'axios',
+      'element-ui': 'ELEMENT',
+      'socket.io-client': 'io'
+    }
   },
 
   devServer: {
@@ -91,7 +101,7 @@ module.exports = {
     allowedHosts: 'all',
     client: {
       webSocketURL: {
-        protocol: 'wss',
+        protocol: 'ws',
         hostname: '0.0.0.0',
         port: 8080,
         pathname: '/ws'
